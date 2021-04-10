@@ -1,0 +1,223 @@
+---
+title: "@DukeGlobalEd Twitter Topic Modeling"
+subtitle: "LDA & STM"
+author: "Soraya Campbell"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    css: 
+      - default
+      - default-fonts
+      - duke-blue
+      - hygge-duke
+      - libs/cc-fonts.css
+      - libs/figure-captions.css
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+library(tidyverse)
+library(stm)
+library(tidytext)
+library(rtweet)
+library(writexl)
+library(readxl)
+library(NLP)
+library(tm)
+library(topicmodels)
+library(SnowballC)
+library(httr)
+library(knitr)
+```
+class: center, middle
+
+# Statement of Purpose
+
+.justify-left[
+I decided to topic model the most recent tweets of [`@DukeGlobalEd`](https://twitter.com/DukeGlobalEd)'s followers. A common strategy for social media managers is to see what topics their followers are tweeting about to learn more about them. You can read a good example of this here: [Twitter Topic Modeling](https://towardsdatascience.com/twitter-topic-modeling-e0e3315b12e2)
+
+By analyzing the topics our followers are talking about the most, we can try to build more engagement by tweeting related content from our account. 
+]
+---
+class: center, middle
+
+# Methodology
+.justify-left[
+[`@DukeGlobalEd`](https://twitter.com/DukeGlobalEd) has 1457 followers. To make the topic modeling more manageable, I made a subset of followers by retaining the ones who seemed to publish the most engaging content.
+
+I defined engagement as users who had the most 'liked' original tweets.* I searched for the top 100 users in this category then fetched their latest tweets (n=500).  
+.center[
+![](dukegeo_50.jpg)
+]
+]
+---
+
+# Data Wrangling
+
+I decided to make a dataframe consisting of 4 variables for the `stm` model since I can include useful meta data:  
+```r
+tmlsclean3<-tmlsfav%>%
+  select(screen_name, created_at, text, favorite_count, retweet_count)%>%  #<<
+  filter(is.na(tmlsfav$reply_to_status_id))
+```
+
+The other dataframe had 3 variables for the `lda` model:
+```r
+tmlsclean1<-tmlsfav%>%
+  select(screen_name, created_at, text)%>%   #<<
+  filter(is.na(tmlsfav$reply_to_status_id)) 
+```
+
+I considered a 'document' the field `created_at`, which is its unique identifier.  
+
+---
+# Clean Up
+
+Twitter data takes a good amount of clean up. I removed:  
+- hyperlinks  
+- punctuation including @'s  
+- &amps;  
+- rt's  
+- replies  
+
+Looking back on the `lda` model I created, additional twitter 'noise' needed to be filtered, including numbers.
+---
+class: inverse, center, middle
+
+# Example: STM cleaning
+
+.justify-left[
+```r
+##Cleaning for stm model
+tmlsclean4<-gsub("amp","", tmlsclean3$text)
+tmlsclean5<-cbind(tmlsclean3, tmlsclean4)
+tmlsclean6<-select(tmlsclean5, -text)
+tmlsclean7<-rename(tmlsclean6, text=tmlsclean4)
+temp <- textProcessor(tmlsclean7$text,
+                     metadata=tmlsclean7,
+                     lowercase=TRUE, 
+                     removestopwords=TRUE, 
+                     removenumbers=TRUE,  
+                     removepunctuation=TRUE, 
+                     wordLengths=c(3,Inf),
+                     stem=TRUE,
+                     onlycharacter= FALSE, 
+                     striphtml=TRUE, 
+                     customstopwords=NULL)
+```
+]
+---
+
+# Modeling
+
+.justify-left[
+- I started off with an `stm` model of 20 topics. I picked this arbitrarily by gauging the inherent interests of a sample of the twitter followers, but it actually ended up being fairly okay.
+- I ran the `ldatuning` "FindTopicNumber" function and it seemed that between 25-35 topics was an optimal number.
+- I decided to run both `stm` and `lda` models with 30 topics.
+- Upon reflection, since there is no 'right' number of topics, I erred on the side of a lower amount of topics in order to better concentrate engagement efforts. Therefore, I ran both 15 and 30 for `lda` and `stm`. 
+]
+.center[
+
+<figure>
+  <img src="skeletor_50.png">
+    <figcaption> Me waiting for my model to run </figcaption>
+</figure>
+
+]
+---
+
+class: center, top
+
+# Finding (Coach) K
+
+.justify-left[
+``` r
+library(ldatuning)
+k_metrics <- FindTopicsNumber(
+  tweets_dtm,
+  topics = seq(10, 75, by = 5),
+  metrics = "Griffiths2004",
+  method = "Gibbs",
+  control = list(),
+  mc.cores = NA,
+  return_models = FALSE,
+  verbose = FALSE,
+  libpath = NULL
+)
+
+```
+]
+
+---
+class: inverse, center, middle
+
+#Find Topics Plot
+
+.justify-left[
+![](K Topics Griffiths.png)
+
+]
+
+---
+class: inverse, center, middle
+
+# STM Plot of 15 Topics
+
+.justify-left[
+![](STM 15.png)
+]
+
+
+---
+class: inverse, center, middle
+
+# STM Plot of 30 Topics 
+
+.justify-left[
+![](STM 30.png)
+]
+
+
+---
+class: inverse, center, middle
+
+# LDA Plot of 15 Topics 
+
+.justify-left[
+![](top 5 Terms LDA 15.png)
+]
+---
+class: inverse, center, middle
+
+# LDA Plot of 30 Topics 
+
+.center[
+![](LDA 30_rs.png)
+]
+---
+# Results
+
+While both models grouped topics a bit differently, the topics seemed to point to a few interesting trends that I've grouped together as possible topics of engagement:
+1. Some of our followers with the greatest engagement seemed to be businesses or community members in the Durham area. Ex. Makus Empanadas, with whom we have catered before and The City of Durham / 'Bull City' (discussions on livable wage, affordable housing). They tweet about their business of issues in the community. 
+2. Duke departments generally tweet about student, research, events, speakers, and also duke sports (Blue Devils)
+3. There's also talk about covid and vaccines
+4. Study abroad and student experiences from our partners abroad and domestically
+
+I believe the 15 topic `LDA` and 30 topic `STM` models provided the best results when reviewing the list of followers vs. the topics that emerged. While I can distinguish some distinct topics, overall, I believe my models need more fine tuning to be somewhat useful to other people who might not have as much context as I do about our followers. 
+---
+# Conclusion/Final Thoughts
+
+I could easily spend even more hours refining and tuning my LDA model. The time it took to run either `stm` or `lda` made me be a bit more conservative in retooling some of the items I thought might help the model. I think these baseline metrics give a good idea of the topics our followers engage in and we can plug into it, if needed, to foster greater engagement with our active followers.  
+
+Some suggestions for improvement:  
+- Refine/define followers who are the 'most engaged' 
+- Go back and 'clean up' some extraneous data that I didn't catch
+- Do more tuning and comparison of the different models to achieve greater quality topics
+---
+.center[
+![](DukeGlobalEd.jpg)
+]
